@@ -1,0 +1,101 @@
+version: '3'
+services:
+
+  postgres_django:
+    image: 'bitnami/postgresql:latest'
+    container_name: postgres_django
+    networks:
+      - application-tier
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres_user
+      - POSTGRES_PASSWORD=mypassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/bitnami/postgresql
+
+  django-app:
+    container_name: django-app
+    build: ./app
+    restart: always
+    entrypoint: /jangoapp/entrypoint.sh
+    networks:
+      - application-tier
+    environment:
+      - DEBUG=1
+      - DJANGO_SETTINGS_MODULE=core.settings
+      - DJANGO_WSGI_MODULE=core.wsgi.application
+      - DJANGO_SETTINGS_URLS=core.urls
+      - DJANGO_SECRET_KEY=yIZ5tXf%d4teEb2dKK5DIbFVh9ZwpWuCynrTjHPsxH23a%8cLL/wtk5pCHm61Njv
+      - DJANGO_ALLOWED_HOSTS=* localhost 127.0.0.1
+      - DJANGO_SUPERUSER_USERNAME=admin
+      - DJANGO_SUPERUSER_PASSWORD=admin1234
+      - DJANGO_SUPERUSER_EMAIL=admin@asd.com
+      - DATABASE_URL=postgresql://postgres_user:mypassword@postgres_django:5432/postgres
+      - CELERY_BROKER_URL=amqp://mquser:mqpassword@rabbit-broker:5672/main
+      - CELERY_RESULT_BACKEND=db+postgresql://postgres_user:mypassword@postgres_django:5432/postgres
+    ports:
+      - "8001:8000"
+    volumes:
+      - api_data:/jangoapp
+    depends_on:
+      - postgres_django
+      - rabbit-broker
+
+  rabbit-broker:
+    container_name: rabbit-broker
+    image: 'bitnami/rabbitmq:latest'
+    networks:
+      - broker-tier
+    environment:
+      - RABBITMQ_USERNAME=mquser
+      - RABBITMQ_PASSWORD=mqpassword
+      - RABBITMQ_VHOST=main
+      - RABBITMQ_MANAGEMENT_ALLOW_WEB_ACCESS=true
+    volumes:
+      - rabbitmq_data:/bitnami/rabbitmq/mnesia
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: on-failure
+
+  celery-worker:
+    container_name: celery-worker
+    build: ./app
+    command: celery -A core.celery worker --loglevel=info -Q celery_fifth,celery_sixth,celery_seventh,celery_eighth
+    networks:
+      - broker-tier
+      - application-tier
+    depends_on:
+      - rabbit-broker
+      - django-app
+    environment:
+      - DJANGO_ALLOWED_HOSTS=* localhost 127.0.0.1
+      - CELERY_BROKER_URL=amqp://mquser:mqpassword@rabbit-broker:5672/main
+      - CELERY_RESULT_BACKEND=db+postgresql://postgres_user:mypassword@postgres_django:5432/postgres
+    restart: on-failure
+
+  celery_worker:
+    container_name: celery_worker
+    build: ./worker
+    command: celery -A engine.celery_worker worker --loglevel=info -Q celery_first,celery_second,celery_third,celery_fourth
+    networks:
+      - broker-tier
+      - application-tier
+    depends_on:
+      - rabbit-broker
+      - django-app
+    environment:
+      - CELERY_BROKER_URL=amqp://mquser:mqpassword@rabbit-broker:5672/main
+      - CELERY_RESULT_BACKEND=db+postgresql://postgres_user:mypassword@postgres_django:5432/postgres
+    restart: on-failure
+
+networks:
+  application-tier:
+  broker-tier:
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  api_data:

@@ -1,0 +1,12 @@
+django
+djangorestframework
+django-admin
+django-rest-swagger
+django-cors-headers
+psycopg2-binary
+django-cors-headers
+djangorestframework
+uwsgi
+billiard
+celery
+sqlalchemy

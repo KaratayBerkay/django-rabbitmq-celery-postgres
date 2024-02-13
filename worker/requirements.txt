@@ -1,0 +1,3 @@
+celery
+sqlalchemy
+psycopg2-binary
